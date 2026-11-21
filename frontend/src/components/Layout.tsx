@@ -17,8 +17,6 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  Wifi,
-  WifiOff,
   X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -52,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function Layout() {
-  const { user, logout, socketConnected, notifications, clearNotifications } = useAuth();
+  const { user, logout, notifications, clearNotifications } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const navigate = useNavigate();
@@ -144,17 +142,6 @@ export function Layout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span
-              className={clsx(
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
-                socketConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
-              )}
-              title="Real-time updates via Socket.IO"
-            >
-              {socketConnected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{socketConnected ? 'Live' : 'Offline'}</span>
-            </span>
-
             <div className="relative">
               <button
                 onClick={() => setNotifOpen((v) => !v)}
