@@ -1,0 +1,6 @@
+name,email,phone,course,completion_date,candidate_id
+Aarav Kulkarni,aarav.k@example.in,9876543210,Solar PV Installation Technician,2026-11-10,SOL-001
+,missing.name@example.in,9876543211,Solar PV Installation Technician,2026-11-10,SOL-002
+Chetan Patil,chetan.p@example.in,12345,Solar PV Installation Technician,2026-11-10,SOL-003
+Divya Joshi,bad-email-format,9876543214,Solar PV Installation Technician,2026-11-10,SOL-004
+Duplicate Phone User,dup@example.in,9876543210,Solar PV Installation Technician,2026-11-10,SOL-005

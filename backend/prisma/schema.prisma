@@ -1,0 +1,398 @@
+// CertiFlow — Pragati Skills Mission certificate issuance platform
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  TRAINING_CENTER
+  DISTRICT_OFFICER
+  QUALITY_OFFICER
+  STATE_OFFICER
+  SUPER_ADMIN
+}
+
+enum BatchStatus {
+  DRAFT
+  SUBMITTED
+  DISTRICT_REVIEW
+  QUALITY_REVIEW
+  STATE_REVIEW
+  APPROVED
+  CERTIFICATE_PROCESSING
+  CERTIFICATES_ISSUED
+  RETURNED
+  REJECTED
+  CANCELLED
+}
+
+enum ReviewStage {
+  DISTRICT
+  QUALITY
+  STATE
+}
+
+enum Decision {
+  APPROVE
+  RETURN
+  REJECT
+}
+
+enum CertificateStatus {
+  PENDING
+  ISSUED
+  CANCELLED
+  FAILED
+}
+
+enum DeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  RETRYING
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryOutcome {
+  SUCCESS
+  TIMEOUT
+  FAILURE
+  SKIPPED
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum EscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Role {
+  code        RoleCode @id
+  name        String
+  description String
+  users       User[]
+}
+
+model District {
+  id              String           @id @default(uuid())
+  code            String           @unique
+  name            String
+  state           String
+  createdAt       DateTime         @default(now())
+  trainingCenters TrainingCenter[]
+  users           User[]
+  batches         Batch[]
+}
+
+model TrainingCenter {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  name            String
+  address         String
+  districtId      String
+  district        District @relation(fields: [districtId], references: [id])
+  createdAt       DateTime @default(now())
+  users           User[]   @relation("CenterUsers")
+  affiliatedUsers User[]   @relation("AffiliatedCenter")
+  batches         Batch[]
+
+  @@index([districtId])
+}
+
+model User {
+  id                         String          @id @default(uuid())
+  email                      String          @unique
+  name                       String
+  passwordHash               String
+  role                       RoleCode
+  roleRef                    Role            @relation(fields: [role], references: [code])
+  districtId                 String?
+  district                   District?       @relation(fields: [districtId], references: [id])
+  trainingCenterId           String?
+  trainingCenter             TrainingCenter? @relation("CenterUsers", fields: [trainingCenterId], references: [id])
+  /// Conflict-of-interest link: an officer affiliated with a centre may not review its batches.
+  affiliatedTrainingCenterId String?
+  affiliatedTrainingCenter   TrainingCenter? @relation("AffiliatedCenter", fields: [affiliatedTrainingCenterId], references: [id])
+  isActive                   Boolean         @default(true)
+  failedLoginCount           Int             @default(0)
+  lockedUntil                DateTime?
+  lastLoginAt                DateTime?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+
+  sessions        Session[]
+  createdBatches  Batch[]         @relation("BatchCreator")
+  approvals       BatchApproval[]
+  cancelledCerts  Certificate[]   @relation("CertCanceller")
+  auditLogs       AuditLog[]
+  resolvedEscalations BatchEscalation[] @relation("EscalationResolver")
+
+  @@index([role])
+  @@index([districtId])
+  @@index([trainingCenterId])
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Batch {
+  id               String      @id @default(uuid())
+  code             String      @unique
+  title            String
+  courseName       String
+  courseCode       String
+  trainingCenterId String
+  trainingCenter   TrainingCenter @relation(fields: [trainingCenterId], references: [id])
+  districtId       String
+  district         District    @relation(fields: [districtId], references: [id])
+  startDate        DateTime?   @db.Date
+  completionDate   DateTime    @db.Date
+  status           BatchStatus @default(DRAFT)
+  version          Int         @default(1)
+  candidateCount   Int         @default(0)
+  requiresQuality  Boolean     @default(false)
+  submittedAt      DateTime?
+  stageEnteredAt   DateTime    @default(now())
+  returnReason     String?
+  rejectReason     String?
+  approvedAt       DateTime?
+  issuedAt         DateTime?
+  createdById      String
+  createdBy        User        @relation("BatchCreator", fields: [createdById], references: [id])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  candidates   Candidate[]
+  approvals    BatchApproval[]
+  certificates Certificate[]
+  escalations  BatchEscalation[]
+
+  @@index([status, districtId])
+  @@index([trainingCenterId, status])
+  @@index([status, stageEnteredAt])
+  @@index([createdAt])
+}
+
+model Candidate {
+  id             String   @id @default(uuid())
+  batchId        String
+  batch          Batch    @relation(fields: [batchId], references: [id])
+  rowNumber      Int
+  externalId     String?
+  name           String
+  email          String?
+  phone          String
+  courseName     String
+  completionDate DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  certificate Certificate?
+
+  @@unique([batchId, phone])
+  @@unique([batchId, externalId])
+  @@index([batchId])
+  @@index([externalId])
+}
+
+model BatchApproval {
+  id         String      @id @default(uuid())
+  batchId    String
+  batch      Batch       @relation(fields: [batchId], references: [id])
+  version    Int
+  stage      ReviewStage
+  decision   Decision
+  reviewerId String
+  reviewer   User        @relation(fields: [reviewerId], references: [id])
+  reason     String?
+  createdAt  DateTime    @default(now())
+
+  /// One decision per reviewer per stage per batch version.
+  @@unique([batchId, version, stage, reviewerId])
+  @@index([batchId, version, stage])
+  @@index([reviewerId])
+}
+
+model Certificate {
+  id                 String            @id @default(uuid())
+  certificateNumber  String            @unique
+  verificationToken  String            @unique
+  batchId            String
+  batch              Batch             @relation(fields: [batchId], references: [id])
+  candidateId        String            @unique
+  candidate          Candidate         @relation(fields: [candidateId], references: [id])
+  candidateName      String
+  courseName         String
+  trainingCenterName String
+  completionDate     DateTime          @db.Date
+  status             CertificateStatus @default(PENDING)
+  pdfPath            String?
+  issuedAt           DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelledBy        User?             @relation("CertCanceller", fields: [cancelledById], references: [id])
+  cancelReason       String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  deliveryJob DeliveryJob?
+
+  /// Issuance scope: exactly one certificate per candidate record of a batch.
+  @@unique([batchId, candidateId])
+  @@index([batchId, status])
+  @@index([status])
+  @@index([issuedAt])
+}
+
+model DeliveryJob {
+  id                String         @id @default(uuid())
+  certificateId     String         @unique
+  certificate       Certificate    @relation(fields: [certificateId], references: [id])
+  idempotencyKey    String         @unique
+  channel           String         @default("WHATSAPP")
+  status            DeliveryStatus @default(PENDING)
+  attempts          Int            @default(0)
+  maxAttempts       Int            @default(5)
+  nextAttemptAt     DateTime       @default(now())
+  lockedAt          DateTime?
+  lastError         String?
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  attemptLogs DeliveryAttempt[]
+
+  @@index([status, nextAttemptAt])
+}
+
+model DeliveryAttempt {
+  id         String          @id @default(uuid())
+  jobId      String
+  job        DeliveryJob     @relation(fields: [jobId], references: [id])
+  attemptNo  Int
+  outcome    DeliveryOutcome
+  error      String?
+  durationMs Int
+  createdAt  DateTime        @default(now())
+
+  @@unique([jobId, attemptNo])
+}
+
+/// Simulated provider-side record. The mock WhatsApp provider deduplicates by idempotency key.
+model MockWhatsAppMessage {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique
+  messageId      String   @unique
+  recipientMask  String
+  createdAt      DateTime @default(now())
+}
+
+model AuditLog {
+  id           String    @id @default(uuid())
+  actorId      String?
+  actor        User?     @relation(fields: [actorId], references: [id])
+  actorRole    RoleCode?
+  action       String
+  resourceType String
+  resourceId   String?
+  batchId      String?
+  reason       String?
+  metadata     Json?
+  ip           String?
+  createdAt    DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([resourceType, resourceId])
+  @@index([batchId])
+  @@index([actorId])
+  @@index([action])
+}
+
+model OutboxEvent {
+  id            String       @id @default(uuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  dedupeKey     String?      @unique
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastError     String?
+  availableAt   DateTime     @default(now())
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([status, availableAt])
+  @@index([eventType])
+}
+
+/// Consumer-side idempotency ledger (at-least-once delivery from the broker).
+model ProcessedEvent {
+  consumer    String
+  eventId     String
+  processedAt DateTime @default(now())
+
+  @@id([consumer, eventId])
+}
+
+model BatchEscalation {
+  id              String           @id @default(uuid())
+  batchId         String
+  batch           Batch            @relation(fields: [batchId], references: [id])
+  version         Int
+  stage           BatchStatus
+  status          EscalationStatus @default(OPEN)
+  responsibleRole RoleCode
+  elapsedMinutes  Int
+  slaMinutes      Int
+  message         String
+  resolution      String?
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolvedBy      User?            @relation("EscalationResolver", fields: [resolvedById], references: [id])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  /// A batch can be escalated at most once per stage per version.
+  @@unique([batchId, version, stage])
+  @@index([status])
+}
+
+model SystemConfiguration {
+  key         String   @id
+  value       Json
+  description String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkerHeartbeat {
+  name       String   @id
+  status     String
+  info       Json?
+  startedAt  DateTime @default(now())
+  lastBeatAt DateTime @default(now())
+}

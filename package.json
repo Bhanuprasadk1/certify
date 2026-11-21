@@ -1,0 +1,18 @@
+{
+  "name": "certiflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CertiFlow — Pragati Skills Mission Skilling Certificate Issuance & Verification Platform",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "test": "npm --prefix backend run test",
+    "db:migrate": "npm --prefix backend run db:migrate",
+    "db:seed": "npm --prefix backend run db:seed",
+    "db:reset-demo": "npm --prefix backend run db:reset-demo",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:push": "docker compose build && docker compose push"
+  }
+}

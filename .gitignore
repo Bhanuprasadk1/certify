@@ -1,0 +1,44 @@
+# Dependencies & build outputs
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Runtime generated certificate PDFs & test storage
+storage/
+storage-test/
+backend/storage/
+backend/storage-test/
+
+# Environment files & secrets (NEVER commit actual .env files or credentials)
+.env
+.env.*
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Keys, certificates & credential dumps
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+credentials*.json
+
+# Logs & OS/editor artifacts
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json
